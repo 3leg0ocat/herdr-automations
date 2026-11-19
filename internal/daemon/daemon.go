@@ -11,12 +11,14 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
 	"syscall"
 	"time"
 
+	"github.com/DnzzL/herdr-automations/internal/cleanup"
 	"github.com/DnzzL/herdr-automations/internal/config"
 	"github.com/DnzzL/herdr-automations/internal/herdr"
 	"github.com/DnzzL/herdr-automations/internal/history"
@@ -79,6 +81,7 @@ func Run(standby bool) error {
 	defer tick.Stop()
 
 	evaluate(state, runs, n) // don't wait a full tick to notice what is already due
+	var lastCleanup time.Time
 
 	for {
 		select {
@@ -106,10 +109,17 @@ func Run(standby bool) error {
 			if stamp != binary && stamp != "" {
 				restart(runs, exe, "binary changed")
 			}
-			if cfg, err := config.Load(); err == nil && cfg.Backend != backend {
+			cfg, cfgErr := config.Load()
+			if cfgErr == nil && cfg.Backend != backend {
 				restart(runs, exe, "backend changed")
 			}
 			evaluate(state, runs, n)
+			// Never while a run is starting: its worktree exists before its
+			// terminal does, and would look abandoned for that moment.
+			if cfgErr == nil && cfg.AutoCleanup && !runs.Busy() && time.Since(lastCleanup) >= cleanupInterval {
+				lastCleanup = time.Now()
+				autoCleanup(cfg)
+			}
 		case s := <-sigs:
 			log.Printf("received %v, shutting down", s)
 			return nil
@@ -274,6 +284,35 @@ func restart(runs *runner.Runner, exe, why string) {
 	// copy), and a failed one leaves it held.
 	if err := execve(exe, os.Args, os.Environ()); err != nil {
 		log.Printf("re-exec failed, continuing with the old build: %v", err)
+	}
+}
+
+// cleanupInterval spaces out auto_cleanup: it shells out to git and hc per repo.
+const cleanupInterval = 10 * time.Minute
+
+// autoCleanup removes the run worktrees cleanup.Scan finds removable: under hc,
+// no live terminal in them, nothing uncommitted, no commit found nowhere else
+// (ADR 0015). git refuses anything dirty on its own, and every outcome is logged.
+func autoCleanup(cfg *config.Config) {
+	pruned := map[string]bool{}
+	for _, a := range cfg.Automations {
+		if !pruned[a.Repo] {
+			pruned[a.Repo] = true
+			// Folders deleted by hand: drop git's records of them first.
+			_ = exec.Command("git", "-C", a.Repo, "worktree", "prune").Run()
+		}
+	}
+	plan, err := cleanup.Scan(cfg)
+	if err != nil {
+		log.Printf("auto cleanup: %v", err)
+		return
+	}
+	if len(plan.Removable) == 0 {
+		return
+	}
+	removed, err := plan.Apply(func(c cleanup.Candidate) { log.Printf("auto cleanup: removed %s (%s)", c.Path, c.Branch) })
+	if err != nil {
+		log.Printf("auto cleanup: stopped after %d: %v", removed, err)
 	}
 }
 

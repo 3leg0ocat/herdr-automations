@@ -1,6 +1,6 @@
 # ADR 0001 — cleanup is never scheduled
 
-**Status**: accepted · **Date**: 2026-08-25
+**Status**: accepted · **Date**: 2026-08-25 · **Amended by**: 0015 (opt-in `auto_cleanup`, this fork)
 
 ## Context
 

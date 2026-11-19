@@ -20,6 +20,7 @@ import (
 
 	"github.com/DnzzL/herdr-automations/internal/config"
 	"github.com/DnzzL/herdr-automations/internal/herdr"
+	"github.com/DnzzL/herdr-automations/internal/host"
 )
 
 // BranchPrefix marks the branches runs create; anything else in the repo is
@@ -39,6 +40,8 @@ const (
 	// KeptUnmerged: commits that exist nowhere else. Squash-merged branches
 	// land here too, which is the safe direction to be wrong in.
 	KeptUnmerged Verdict = "commits not in the default branch"
+	// KeptDirty: uncommitted changes, which no branch holds.
+	KeptDirty Verdict = "uncommitted changes"
 )
 
 // Candidate is one run worktree and what should happen to it.
@@ -122,8 +125,15 @@ func (p Plan) Apply(done func(Candidate)) (removed int, err error) {
 	return removed, nil
 }
 
-// Scan classifies every run worktree across the repos the config names.
-func Scan(cfg *config.Config) (Plan, error) { return scan(cfg, gitRepos{}) }
+// Scan classifies every run worktree across the repos the config names. Under
+// the hc backend the Herdr TUI knows none of the app's spaces, so whether a
+// worktree is still open is asked of herdr-core instead (hc.go).
+func Scan(cfg *config.Config) (Plan, error) {
+	if host.Resolve(cfg.Backend) == config.BackendHC {
+		return scan(cfg, hcRepos{})
+	}
+	return scan(cfg, gitRepos{})
+}
 
 // repos is this package's internal seam: what it needs to know about a
 // checkout, and the one destructive thing it does to one. A fake lets the
@@ -132,6 +142,8 @@ type repos interface {
 	Worktrees(repo string) ([]herdr.Worktree, error)
 	DefaultBranch(repo string) (string, error)
 	Merged(repo, branch, base string) bool
+	// Dirty reports uncommitted changes in a checkout, or that it cannot tell.
+	Dirty(path string) bool
 	Remove(c Candidate) error
 }
 
@@ -175,6 +187,9 @@ func verdict(r repos, repo string, w herdr.Worktree, base string) Verdict {
 	if w.OpenWorkspaceID != "" {
 		return KeptOpen
 	}
+	if r.Dirty(w.Path) {
+		return KeptDirty
+	}
 	if r.Merged(repo, w.Branch, base) {
 		return Removable
 	}
@@ -206,6 +221,15 @@ func (gitRepos) DefaultBranch(repo string) (string, error) {
 
 func (gitRepos) Merged(repo, branch, base string) bool {
 	return git(repo, "merge-base", "--is-ancestor", branch, base) == nil
+}
+
+// Dirty is true on any status output, or when status itself fails: unsure
+// means keep.
+func (gitRepos) Dirty(path string) bool { return dirty(path) }
+
+func dirty(path string) bool {
+	out, err := exec.Command("git", "-C", path, "status", "--porcelain").Output()
+	return err != nil || strings.TrimSpace(string(out)) != ""
 }
 
 // Remove drops the checkout and then the branch. Neither step is forced: git

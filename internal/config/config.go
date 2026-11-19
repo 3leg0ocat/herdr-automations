@@ -132,6 +132,10 @@ type Config struct {
 	// Paused holds every automation, on top of each one's own Disabled, so
 	// resuming restores exactly what was paused before.
 	Paused bool `yaml:"paused,omitempty"`
+	// AutoCleanup lets the daemon remove run worktrees nobody needs any more:
+	// no live terminal in them, nothing uncommitted, no commit found nowhere
+	// else. Off by default (ADR 0001); ADR 0015 says why it may be turned on.
+	AutoCleanup bool `yaml:"auto_cleanup,omitempty"`
 	// Automations are the entries that loaded. Only these run.
 	Automations []Automation `yaml:"automations"`
 	// Invalid are the entries that did not, one Diagnostic each. Kept out of
@@ -332,6 +336,7 @@ func parse(raw []byte) (*Config, error) {
 	var doc struct {
 		Backend     Backend     `yaml:"backend"`
 		Paused      bool        `yaml:"paused"`
+		AutoCleanup bool        `yaml:"auto_cleanup"`
 		Automations []yaml.Node `yaml:"automations"`
 	}
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
@@ -343,7 +348,7 @@ func parse(raw []byte) (*Config, error) {
 		return nil, fmt.Errorf("%s: backend must be herdr, hc or auto, got %q", Path(), doc.Backend)
 	}
 
-	cfg := &Config{Backend: doc.Backend, Paused: doc.Paused}
+	cfg := &Config{Backend: doc.Backend, Paused: doc.Paused, AutoCleanup: doc.AutoCleanup}
 	// Kept as written on Windows, so a save there does not rewrite a line
 	// shared with a Mac; Effective settles it (ADR 0013).
 	if doc.Backend == "" && goos != "windows" {

@@ -2,7 +2,9 @@ package cleanup
 
 import (
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -44,19 +46,25 @@ func TestVerdict(t *testing.T) {
 	if base != "main" {
 		t.Fatalf("expected the main fallback, got %q", base)
 	}
+	// A second checkout with a file git has not seen.
+	dirtyDir := repoWithBranches(t)
+	if err := os.WriteFile(filepath.Join(dirtyDir, "new.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	cases := []struct {
 		name string
 		wt   herdr.Worktree
 		want Verdict
 	}{
-		{"produced nothing", herdr.Worktree{Branch: "auto/did-nothing"}, Removable},
-		{"has its own commits", herdr.Worktree{Branch: "auto/did-work"}, KeptUnmerged},
+		{"produced nothing", herdr.Worktree{Branch: "auto/did-nothing", Path: repo}, Removable},
+		{"has its own commits", herdr.Worktree{Branch: "auto/did-work", Path: repo}, KeptUnmerged},
+		{"left changes uncommitted", herdr.Worktree{Branch: "auto/did-nothing", Path: dirtyDir}, KeptDirty},
 		{
 			// An open workspace outranks everything: it means nobody has read
 			// the run yet, whatever git thinks of the branch.
 			"still open",
-			herdr.Worktree{Branch: "auto/did-nothing", OpenWorkspaceID: "w42"},
+			herdr.Worktree{Branch: "auto/did-nothing", Path: repo, OpenWorkspaceID: "w42"},
 			KeptOpen,
 		},
 	}
@@ -76,6 +84,7 @@ func TestVerdict(t *testing.T) {
 type fakeRepos struct {
 	worktrees map[string][]herdr.Worktree
 	merged    map[string]bool
+	dirty     map[string]bool
 	baseErr   error
 	listErr   error
 	removeErr map[string]error
@@ -100,6 +109,8 @@ func (f *fakeRepos) DefaultBranch(string) (string, error) {
 }
 
 func (f *fakeRepos) Merged(_, branch, _ string) bool { return f.merged[branch] }
+
+func (f *fakeRepos) Dirty(path string) bool { return f.dirty[path] }
 
 func (f *fakeRepos) Remove(c Candidate) error {
 	if err := f.removeErr[c.Branch]; err != nil {
