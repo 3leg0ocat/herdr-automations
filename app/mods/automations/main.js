@@ -17,7 +17,8 @@ const PRESETS = [
 ];
 // The agents hc can hand a prompt to and watch to the end (config.KindTakesPromptArg).
 // The form offers the ones installed here.
-const AGENTS = ["claude", "codex", "pi", "copilot"];
+// Local choice: copilot left out of the form (the CLI still accepts it in automations.yaml).
+const AGENTS = ["claude", "codex", "pi"];
 const WORKSPACES = [["worktree", "New worktree"], ["root", "Repo root"], ["existing", "Existing space"]];
 const FINISHED = new Set(["done", "failed", "cancelled"]);
 // The herdr API names no platform; a Windows home starts with a drive letter.
