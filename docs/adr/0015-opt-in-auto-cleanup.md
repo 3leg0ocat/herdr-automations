@@ -23,10 +23,14 @@ two things change:
   nothing uncommitted (`git status --porcelain` empty), and no commit on its
   branch missing from every other branch and remote. Work to review stays.
 - `auto_cleanup: true` at the top of automations.yaml lets the daemon apply
-  that plan every 10 minutes, never while a run is starting. Off by default, so
-  ADR 0001 still describes the default.
-- Removal is never forced: `git worktree remove` without `--force`, and the
-  branch is deleted only after its commits were checked again.
+  that plan every 10 minutes, skipped while any run is in flight. Off by
+  default, so ADR 0001 still describes the default.
+- The checkout is removed with `git worktree remove`, without `--force`, so git
+  still refuses a dirty one. The branch is then deleted with `git branch -D`,
+  only after the check that its commits are held elsewhere has run again.
+- A run worktree is recognised by its `auto/` branch prefix alone; nothing
+  records which worktrees a run created. Files git ignores (`.env`, build
+  output) are not "uncommitted" and go with the checkout.
 
 ## Consequences
 
