@@ -2,6 +2,31 @@
 
 **Scheduled tasks for your coding agents.** A prompt, a cron line, and a fresh git worktree per run.
 
+> **This is a fork** of [DnzzL/herdr-automations](https://github.com/DnzzL/herdr-automations)
+> on the `windows` branch: upstream v0.13.0 (Windows support included) plus, for the Herdr
+> desktop app (`backend: hc`):
+>
+> - **Opt-in `auto_cleanup: true`.** The daemon removes run worktrees every 10 minutes when no
+>   live hc terminal is inside, nothing is uncommitted and no commit exists only there
+>   ([ADR 0015](docs/adr/0015-opt-in-auto-cleanup.md)). `cleanup` uses the same rules under hc.
+> - The panel's agent choices are claude, codex and pi.
+>
+> On Windows, install or update it with upstream's installer pointed at this fork's
+> [Windows build](https://github.com/3leg0ocat/herdr-automations/releases/tag/windows-latest)
+> release (the only one, updated in place), then the panel from the same release:
+>
+> ```powershell
+> $env:HERDR_AUTOMATIONS_RELEASES_URL = "https://github.com/3leg0ocat/herdr-automations/releases"
+> irm https://raw.githubusercontent.com/3leg0ocat/herdr-automations/windows/scripts/install.ps1 | iex
+> curl.exe -fsSL https://github.com/3leg0ocat/herdr-automations/releases/latest/download/automations-mod.zip -o "$env:TEMP\automations-mod.zip"
+> Expand-Archive -Force "$env:TEMP\automations-mod.zip" "$HOME\.config\herdr-app\mods"
+> herdr-automations service install     # once; in a new terminal
+> ```
+>
+> Everything else is as in [Windows (community)](#windows-community) below. Claude Code asks
+> whether to trust each new folder; trusting `~/.herdr/worktrees` once covers every run
+> worktree under it.
+
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/go-1.26+-00ADD8?logo=go)](go.mod)
 [![Herdr](https://img.shields.io/badge/herdr-%E2%89%A50.8-8A2BE2)](https://herdr.dev)
